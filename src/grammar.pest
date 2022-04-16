@@ -1,0 +1,23 @@
+// Define what whitespace can go between tokens
+WHITESPACE = _{ " " | "\t"}
+COMMENT = _{ "#" ~ (!NEWLINE ~ ANY)* ~ (NEWLINE | EOI) }
+
+// Keywords
+AND = _{ "and" }
+IF = _{ "if" }
+keyword = _{ AND | IF }
+
+// Grammar
+atom = @{ ASCII_ALPHA_LOWER ~ ASCII_ALPHA* }
+variable = @{ (ASCII_ALPHA_UPPER | "_") ~ ASCII_ALPHA* }
+simple_term = _{ !keyword ~ atom | variable }
+// Predicate or functor
+// Try to match simple_term first so that we parse a bunch of consecutive simple
+// terms flatly instead of something like
+// compound_term(compound_term(simple_term))
+compound_term = { simple_term ~ (simple_term | term)+ }
+parenthesized_term = _{ "(" ~ term ~ ")" }
+term = _{ parenthesized_term | compound_term | simple_term }
+conjunction = { term ~ (AND ~ term)* }
+clause = { term ~ (IF ~ conjunction)? ~ (NEWLINE | EOI) }
+program = { SOI ~ clause* ~ EOI }
