@@ -4,14 +4,16 @@ extern crate pest_derive;
 
 use pest::Parser;
 
+mod ast;
+
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
-struct MyParser;
+struct ButterflyPLParser;
 
 fn main() {
-    let result = MyParser::parse(Rule::program, "abc\n\tAbc \n");
+    let result = ButterflyPLParser::parse(Rule::program, "abc\n\tAbc \n");
     println!("{:?}", result);
 
-    let result = MyParser::parse(Rule::program, "# comment \n abc Y X if abc X Y and def \n # comment");
+    let result = ButterflyPLParser::parse(Rule::program, "# comment \n abc Y X if abc X Y and def \n # comment");
     println!("{:?}", result);
 }
