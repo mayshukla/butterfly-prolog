@@ -1,0 +1,16 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  cargo-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+      - name: Install rust toolchain (stable)
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Run cargo test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
