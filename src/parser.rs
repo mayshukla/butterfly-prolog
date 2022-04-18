@@ -16,17 +16,26 @@ pub fn parse(code: &str) -> Result<Program, &str> {
         .next()
         .unwrap();
 
-    let clauses = Vec::new();
-    for parsed_clause in parsed_program.into_inner() {
-        /*
-        let parsed_head = parsed_clause.into_inner().next().unwrap();
-        let clause = Clause {
-
-        }
-        */
+    let mut clauses = Vec::new();
+    for pair in parsed_program.into_inner() {
+        let clause = construct_clause(pair);
+        clauses.push(clause);
     }
 
     Ok(clauses)
+}
+
+fn construct_clause(pair: Pair<Rule>) -> Clause {
+    let mut it = pair.into_inner();
+    let head = construct_term(it.next().unwrap());
+
+    let mut body = Vec::new();
+    let mut it = it.next().unwrap().into_inner();
+    for pair in it {
+        body.push(construct_term(pair));
+    }
+
+    Clause { head, body }
 }
 
 fn construct_term(pair: Pair<Rule>) -> Term {
@@ -126,5 +135,89 @@ mod tests {
             });
 
         assert_eq!(expected_term, term);
+    }
+
+    #[test]
+    fn test_construct_clause_without_body() {
+        let pair = parse_and_unwrap(Rule::clause, "a (a (b e f)) c");
+        let clause = construct_clause(pair);
+
+        let mut parameters = Vec::new();
+        parameters.push(Term::Simple(SimpleTerm::Atom(String::from("e"))));
+        parameters.push(Term::Simple(SimpleTerm::Atom(String::from("f"))));
+        let arg1 =
+            Term::Compound(CompoundTerm {
+                name: SimpleTerm::Atom(String::from("b")),
+                parameters
+            });
+
+        let mut parameters = Vec::new();
+        parameters.push(arg1);
+        let arg2 =
+            Term::Compound(CompoundTerm {
+                name: SimpleTerm::Atom(String::from("a")),
+                parameters
+            });
+
+        let mut parameters = Vec::new();
+        parameters.push(arg2);
+        parameters.push(Term::Simple(SimpleTerm::Atom(String::from("c"))));
+        let expected_head =
+            Term::Compound(CompoundTerm {
+                name: SimpleTerm::Atom(String::from("a")),
+                parameters
+            });
+
+        let mut expected_body = Vec::new();
+
+        let expected_clause = Clause {
+            head: expected_head,
+            body: expected_body
+        };
+
+        assert_eq!(expected_clause, clause);
+    }
+
+    #[test]
+    fn test_construct_clause_with_body() {
+        let pair = parse_and_unwrap(Rule::clause, "a (a (b e f)) c if a and b");
+        let clause = construct_clause(pair);
+
+        let mut parameters = Vec::new();
+        parameters.push(Term::Simple(SimpleTerm::Atom(String::from("e"))));
+        parameters.push(Term::Simple(SimpleTerm::Atom(String::from("f"))));
+        let arg1 =
+            Term::Compound(CompoundTerm {
+                name: SimpleTerm::Atom(String::from("b")),
+                parameters
+            });
+
+        let mut parameters = Vec::new();
+        parameters.push(arg1);
+        let arg2 =
+            Term::Compound(CompoundTerm {
+                name: SimpleTerm::Atom(String::from("a")),
+                parameters
+            });
+
+        let mut parameters = Vec::new();
+        parameters.push(arg2);
+        parameters.push(Term::Simple(SimpleTerm::Atom(String::from("c"))));
+        let expected_head =
+            Term::Compound(CompoundTerm {
+                name: SimpleTerm::Atom(String::from("a")),
+                parameters
+            });
+
+        let mut expected_body = Vec::new();
+        expected_body.push(Term::Simple(SimpleTerm::Atom(String::from("a"))));
+        expected_body.push(Term::Simple(SimpleTerm::Atom(String::from("b"))));
+
+        let expected_clause = Clause {
+            head: expected_head,
+            body: expected_body
+        };
+
+        assert_eq!(expected_clause, clause);
     }
 }

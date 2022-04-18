@@ -3,7 +3,7 @@ pub type Program = Vec<Clause>;
 #[derive(Debug, PartialEq)]
 pub struct Clause {
     pub head: Term,
-    pub body: Option<Vec<Term>>,
+    pub body: Vec<Term>,
 }
 
 #[derive(Debug, PartialEq)]
