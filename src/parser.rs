@@ -16,23 +16,36 @@ pub fn parse(code: &str) -> Result<Program, &str> {
         .next()
         .unwrap();
 
-    let mut clauses = Vec::new();
+    println!("{:?}", parsed_program);
+
+    let mut program = Program::new();
     for pair in parsed_program.into_inner() {
-        let clause = construct_clause(pair);
-        clauses.push(clause);
+        match pair.as_rule() {
+            Rule::clause => {
+                let clause = construct_clause(pair);
+                program.push(clause);
+            },
+            Rule::EOI => (),
+            _ => unreachable!()
+        }
     }
 
-    Ok(clauses)
+    Ok(program)
 }
 
 fn construct_clause(pair: Pair<Rule>) -> Clause {
+    println!("construct clause from pair: {:?}", pair);
     let mut it = pair.into_inner();
     let head = construct_term(it.next().unwrap());
 
     let mut body = Vec::new();
-    let mut it = it.next().unwrap().into_inner();
-    for pair in it {
-        body.push(construct_term(pair));
+    match it.next() {
+        Some(pair) => {
+            for pair in pair.into_inner() {
+                body.push(construct_term(pair));
+            }
+        },
+        None => ()
     }
 
     Clause { head, body }
@@ -100,7 +113,7 @@ mod tests {
     #[should_panic]
     fn test_construct_term_panic() {
         let pair = parse_and_unwrap(Rule::term, "#abc");
-        let term = construct_term(pair);
+        let _ = construct_term(pair);
     }
 
     #[test]
@@ -168,7 +181,7 @@ mod tests {
                 parameters
             });
 
-        let mut expected_body = Vec::new();
+        let expected_body = Vec::new();
 
         let expected_clause = Clause {
             head: expected_head,
@@ -219,5 +232,61 @@ mod tests {
         };
 
         assert_eq!(expected_clause, clause);
+    }
+
+    #[test]
+    fn test_parse() {
+        let program = parse("a \n a (a (b e f)) c if a and b \n b").unwrap();
+
+        let mut expected_program = Program::new();
+
+        expected_program.push(Clause {
+            head: Term::Simple(SimpleTerm::Atom(String::from("a"))),
+            body: Vec::new()
+        });
+
+        let mut parameters = Vec::new();
+        parameters.push(Term::Simple(SimpleTerm::Atom(String::from("e"))));
+        parameters.push(Term::Simple(SimpleTerm::Atom(String::from("f"))));
+        let arg1 =
+            Term::Compound(CompoundTerm {
+                name: SimpleTerm::Atom(String::from("b")),
+                parameters
+            });
+
+        let mut parameters = Vec::new();
+        parameters.push(arg1);
+        let arg2 =
+            Term::Compound(CompoundTerm {
+                name: SimpleTerm::Atom(String::from("a")),
+                parameters
+            });
+
+        let mut parameters = Vec::new();
+        parameters.push(arg2);
+        parameters.push(Term::Simple(SimpleTerm::Atom(String::from("c"))));
+        let expected_head =
+            Term::Compound(CompoundTerm {
+                name: SimpleTerm::Atom(String::from("a")),
+                parameters
+            });
+
+        let mut expected_body = Vec::new();
+        expected_body.push(Term::Simple(SimpleTerm::Atom(String::from("a"))));
+        expected_body.push(Term::Simple(SimpleTerm::Atom(String::from("b"))));
+
+        let expected_clause = Clause {
+            head: expected_head,
+            body: expected_body
+        };
+
+        expected_program.push(expected_clause);
+
+        expected_program.push(Clause {
+            head: Term::Simple(SimpleTerm::Atom(String::from("b"))),
+            body: Vec::new()
+        });
+
+        assert_eq!(expected_program, program);
     }
 }
