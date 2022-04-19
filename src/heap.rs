@@ -63,6 +63,10 @@ impl Heap {
     pub fn read(&self, index: HeapIndex) -> HeapEntry {
         self.buffer[index]
     }
+
+    pub fn len(&self) -> HeapIndex {
+        self.buffer.len()
+    }
 }
 
 impl HeapEntry {

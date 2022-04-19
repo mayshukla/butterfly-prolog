@@ -17,6 +17,7 @@ struct Compiler {
  * A descriptor of a clause on the heap.
  * Based on the "Clause" class in https://github.com/ptarau/iProlog
  */
+#[derive(Debug, PartialEq)]
 struct ClauseDescriptor {
     // Index to start of clause
     base: HeapIndex,
@@ -25,10 +26,10 @@ struct ClauseDescriptor {
     // Length of head of clause
     neck: HeapIndex,
 
-    // Toplevel skeleton of clause (indeces of top-level elements)
-    gs: Vec<HeapIndex>,
-    // Used to store dereferenced data
-    xs: Vec<HeapIndex>,
+    // Toplevel skeleton of clause (indeces of top-level terms)
+    terms: Vec<HeapIndex>,
+    // Dereferenced subterms of head
+    head_subterms: Vec<HeapIndex>,
 }
 
 #[derive(Debug)]
@@ -56,23 +57,39 @@ impl Compiler {
 
     fn compile_clause(&mut self, clause: Clause) {
         self.current_clause_variables.clear();
-        self.compile_term(clause.head);
+        let base = self.compile_term(clause.head);
+        let neck = self.heap.len();
+
+        let mut terms = Vec::new();
+        terms.push(base);
+
         for term in clause.body {
-            self.compile_term(term);
+            let term_index = self.compile_term(term);
+            terms.push(term_index);
         }
-        // TODO create ClauseDescriptor and push
+
+        let length = self.heap.len() - base;
+
+        self.clauses.push(ClauseDescriptor {
+            base,
+            length,
+            neck,
+            terms,
+            head_subterms: Vec::new(), // TODO
+        });
     }
 
-    fn compile_term(&mut self, term: Term) {
+    fn compile_term(&mut self, term: Term) -> HeapIndex {
         match term {
-            Term::Compound(term) => { let _ = self.compile_compound_term(term); },
+            Term::Compound(term) => self.compile_compound_term(term),
             Term::Simple(term) => self.compile_simple_term(term),
         }
     }
 
-    fn compile_simple_term(&mut self, term: SimpleTerm) {
+    fn compile_simple_term(&mut self, term: SimpleTerm) -> HeapIndex {
         let index = self.heap.alloc(1);
         self.compile_simple_term_no_alloc(term, index);
+        index
     }
 
     /**
@@ -173,6 +190,37 @@ impl SymbolTable {
 #[cfg(test)]
 mod tests {
     use crate::compiler::*;
+
+    /**
+     * Returns a Term representing "a (a (b e f)) c"
+     */
+    fn make_compound_term() -> Term {
+        let mut parameters = Vec::new();
+        parameters.push(Term::Simple(SimpleTerm::Atom(String::from("e"))));
+        parameters.push(Term::Simple(SimpleTerm::Atom(String::from("f"))));
+        let arg1 =
+            Term::Compound(CompoundTerm {
+                name: SimpleTerm::Atom(String::from("b")),
+                parameters
+            });
+
+        let mut parameters = Vec::new();
+        parameters.push(arg1);
+        let arg2 =
+            Term::Compound(CompoundTerm {
+                name: SimpleTerm::Atom(String::from("a")),
+                parameters
+            });
+
+        let mut parameters = Vec::new();
+        parameters.push(arg2);
+        parameters.push(Term::Simple(SimpleTerm::Atom(String::from("c"))));
+
+        Term::Compound(CompoundTerm {
+            name: SimpleTerm::Atom(String::from("a")),
+            parameters
+        })
+    }
 
     #[test]
     fn test_compile_atom() {
@@ -277,35 +325,9 @@ mod tests {
     #[test]
     fn test_compile_compound_term() {
         let mut program = Program::new();
-
-        let mut parameters = Vec::new();
-        parameters.push(Term::Simple(SimpleTerm::Atom(String::from("e"))));
-        parameters.push(Term::Simple(SimpleTerm::Atom(String::from("f"))));
-        let arg1 =
-            Term::Compound(CompoundTerm {
-                name: SimpleTerm::Atom(String::from("b")),
-                parameters
-            });
-
-        let mut parameters = Vec::new();
-        parameters.push(arg1);
-        let arg2 =
-            Term::Compound(CompoundTerm {
-                name: SimpleTerm::Atom(String::from("a")),
-                parameters
-            });
-
-        let mut parameters = Vec::new();
-        parameters.push(arg2);
-        parameters.push(Term::Simple(SimpleTerm::Atom(String::from("c"))));
-        let compound_term =
-            Term::Compound(CompoundTerm {
-                name: SimpleTerm::Atom(String::from("a")),
-                parameters
-            });
-
+        let head = make_compound_term();
         program.push(Clause {
-            head: compound_term,
+            head,
             body: Vec::new()
         });
 
@@ -315,6 +337,7 @@ mod tests {
 
         //println!("heap: {:?}", compiler.heap);
         //println!("symbol_table: {:?}", compiler.symbol_table);
+        //println!("clauses: {:?}", compiler.clauses);
 
         let expected_heap = vec![
             // 0: a a _4 c
@@ -338,5 +361,62 @@ mod tests {
         for i in 0..expected_heap.len() {
             assert_eq!(expected_heap[i], compiler.heap.read(i));
         }
+    }
+
+    #[test]
+    fn test_compile_clause() {
+        let mut program = Program::new();
+        let head = make_compound_term();
+        let mut body = Vec::new();
+        body.push(Term::Simple(SimpleTerm::Atom(String::from("x"))));
+        body.push(Term::Simple(SimpleTerm::Variable(String::from("Y"))));
+        program.push(Clause { head, body });
+
+        println!("ast: {:?}", program);
+        let mut compiler = Compiler::new();
+        compiler.compile(program);
+
+        println!("heap: {:?}", compiler.heap);
+        println!("symbol_table: {:?}", compiler.symbol_table);
+        println!("clauses: {:?}", compiler.clauses);
+
+        let expected_heap = vec![
+            // 0: a a _4 c
+            HeapEntry::new(HeapTag::Arity, 2),
+            HeapEntry::new(HeapTag::Constant, 0),
+            HeapEntry::new(HeapTag::Reference, 4),
+            HeapEntry::new(HeapTag::Constant, 4),
+
+            // 4: a _7
+            HeapEntry::new(HeapTag::Arity, 1),
+            HeapEntry::new(HeapTag::Constant, 0),
+            HeapEntry::new(HeapTag::Reference, 7),
+
+            // 7: b e f
+            HeapEntry::new(HeapTag::Arity, 2),
+            HeapEntry::new(HeapTag::Constant, 1),
+            HeapEntry::new(HeapTag::Constant, 2),
+            HeapEntry::new(HeapTag::Constant, 3),
+
+            // 11: x
+            HeapEntry::new(HeapTag::Constant, 5),
+
+            // 12: y
+            HeapEntry::new(HeapTag::Variable, 12),
+        ];
+
+        for i in 0..expected_heap.len() {
+            assert_eq!(expected_heap[i], compiler.heap.read(i));
+        }
+
+        let expected_clause = ClauseDescriptor {
+            base: 0,
+            length: 13,
+            neck: 11,
+            terms: vec![0, 11, 12],
+            head_subterms: vec![0, 4, 3],
+        };
+
+        assert_eq!(expected_clause, compiler.clauses[0]);
     }
 }
