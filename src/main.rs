@@ -4,8 +4,7 @@ extern crate pest_derive;
 
 mod ast;
 mod parser;
-
-use parser::parse;
+mod heap;
 
 fn main() {
 }
