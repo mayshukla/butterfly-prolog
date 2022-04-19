@@ -4,6 +4,7 @@
  *
  * Based on heap representation used in https://github.com/ptarau/iProlog
  */
+#[derive(Debug, PartialEq)]
 pub struct Heap {
     buffer: Vec<HeapEntry>,
 }
