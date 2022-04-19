@@ -65,34 +65,40 @@ impl Compiler {
 
     fn compile_term(&mut self, term: Term) {
         match term {
-            Term::Compound(term) => self.compile_compound_term(term),
+            Term::Compound(term) => { let _ = self.compile_compound_term(term); },
             Term::Simple(term) => self.compile_simple_term(term),
         }
     }
 
     fn compile_simple_term(&mut self, term: SimpleTerm) {
+        let index = self.heap.alloc(1);
+        self.compile_simple_term_no_alloc(term, index);
+    }
+
+    /**
+     * Compiles a simple term and places on the heap at index.
+     * Heap must have one space allocated at index.
+     */
+    fn compile_simple_term_no_alloc(&mut self, term: SimpleTerm, index: HeapIndex) {
         match term {
             SimpleTerm::Atom(atom) => {
                 // Get index from symbol table, creating new symbol if one
                 // doesn't already exist.
-                let index = match self.symbol_table.get_index(&atom) {
-                    Some(index) => index,
+                let symbol_index = match self.symbol_table.get_index(&atom) {
+                    Some(prev_index) => prev_index,
                     None => self.symbol_table.push(&atom)
                 };
-                let heap_entry = HeapEntry::new(HeapTag::Constant, index);
-                let index = self.heap.alloc(1);
+                let heap_entry = HeapEntry::new(HeapTag::Constant, symbol_index);
                 self.heap.write(index, heap_entry);
             },
             SimpleTerm::Variable(variable) => {
                 match self.current_clause_variables.get(&variable) {
                     Some(variable_index) => {
                         // Variable has been seen before
-                        let heap_index = self.heap.alloc(1);
-                        self.heap.write(heap_index, HeapEntry::new(HeapTag::Unify, *variable_index));
+                        self.heap.write(index, HeapEntry::new(HeapTag::Unify, *variable_index));
                     },
                     None => {
                         // First time seeing variable
-                        let index = self.heap.alloc(1);
                         self.heap.write(index, HeapEntry::new(HeapTag::Variable, index));
                         self.current_clause_variables.insert(variable, index);
                     }
@@ -101,8 +107,40 @@ impl Compiler {
         }
     }
 
-    fn compile_compound_term(&mut self, term: CompoundTerm) {
-        todo!()
+    /**
+     * Compiles compound term and returns index of start of term in heap.
+     */
+    fn compile_compound_term(&mut self, term: CompoundTerm) -> HeapIndex {
+        // Allocate heap space for 2 + parameters.len()
+        // + 2 to make room for arity and name
+        let arity = term.parameters.len();
+        let start_index = self.heap.alloc(2 + arity);
+        let mut index = start_index;
+
+        let arity_cell = HeapEntry::new(HeapTag::Arity, arity);
+        self.heap.write(index, arity_cell);
+
+        index += 1;
+        self.compile_simple_term_no_alloc(term.name, index);
+
+        for param in term.parameters {
+            index += 1;
+            match param {
+                Term::Simple(simple_term) => {
+                    self.compile_simple_term_no_alloc(simple_term, index);
+                },
+                Term::Compound(compound_term) => {
+                    // Compile the subterm somewhere else in the heap.
+                    let subterm_index = self.compile_compound_term(compound_term);
+                    // Place a reference to the compiled subterm in the current
+                    // term's array slice.
+                    let reference = HeapEntry::new(HeapTag::Reference, subterm_index);
+                    self.heap.write(index, reference);
+                }
+            }
+        }
+
+        start_index
     }
 }
 
@@ -229,6 +267,72 @@ mod tests {
             HeapEntry::new(HeapTag::Unify, 1),
             HeapEntry::new(HeapTag::Constant, 0),
             HeapEntry::new(HeapTag::Variable, 5),
+        ];
+
+        for i in 0..expected_heap.len() {
+            assert_eq!(expected_heap[i], compiler.heap.read(i));
+        }
+    }
+
+    #[test]
+    fn test_compile_compound_term() {
+        let mut program = Program::new();
+
+        let mut parameters = Vec::new();
+        parameters.push(Term::Simple(SimpleTerm::Atom(String::from("e"))));
+        parameters.push(Term::Simple(SimpleTerm::Atom(String::from("f"))));
+        let arg1 =
+            Term::Compound(CompoundTerm {
+                name: SimpleTerm::Atom(String::from("b")),
+                parameters
+            });
+
+        let mut parameters = Vec::new();
+        parameters.push(arg1);
+        let arg2 =
+            Term::Compound(CompoundTerm {
+                name: SimpleTerm::Atom(String::from("a")),
+                parameters
+            });
+
+        let mut parameters = Vec::new();
+        parameters.push(arg2);
+        parameters.push(Term::Simple(SimpleTerm::Atom(String::from("c"))));
+        let compound_term =
+            Term::Compound(CompoundTerm {
+                name: SimpleTerm::Atom(String::from("a")),
+                parameters
+            });
+
+        program.push(Clause {
+            head: compound_term,
+            body: Vec::new()
+        });
+
+        //println!("ast: {:?}", program);
+        let mut compiler = Compiler::new();
+        compiler.compile(program);
+
+        //println!("heap: {:?}", compiler.heap);
+        //println!("symbol_table: {:?}", compiler.symbol_table);
+
+        let expected_heap = vec![
+            // 0: a a _4 c
+            HeapEntry::new(HeapTag::Arity, 2),
+            HeapEntry::new(HeapTag::Constant, 0),
+            HeapEntry::new(HeapTag::Reference, 4),
+            HeapEntry::new(HeapTag::Constant, 4),
+
+            // 4: a _7
+            HeapEntry::new(HeapTag::Arity, 1),
+            HeapEntry::new(HeapTag::Constant, 0),
+            HeapEntry::new(HeapTag::Reference, 7),
+
+            // 7: b e f
+            HeapEntry::new(HeapTag::Arity, 2),
+            HeapEntry::new(HeapTag::Constant, 1),
+            HeapEntry::new(HeapTag::Constant, 2),
+            HeapEntry::new(HeapTag::Constant, 3),
         ];
 
         for i in 0..expected_heap.len() {
