@@ -58,6 +58,14 @@ impl Compiler {
 
     fn compile_clause(&mut self, clause: Clause) {
         self.current_clause_variables.clear();
+
+        match clause.head {
+            Term::Simple(_) => {
+                self.create_arity_entry_for_simple_term();
+            },
+            _ => (),
+        }
+
         let base = self.compile_term(clause.head);
         let neck = self.heap.len();
 
@@ -65,7 +73,14 @@ impl Compiler {
         terms.push(base);
 
         for term in clause.body {
-            let term_index = self.compile_term(term);
+            let term_index = self.heap.len();
+            match term {
+                Term::Simple(_) => {
+                    self.create_arity_entry_for_simple_term();
+                },
+                _ => (),
+            }
+            self.compile_term(term);
             terms.push(term_index);
         }
 
@@ -85,6 +100,20 @@ impl Compiler {
             terms,
             head_subterms,
         });
+    }
+
+    /**
+     * Top-level simple terms need an Arity entry. This is because every entry
+     * in the terms array of a ClauseDescriptor is expected to point to an Arity
+     * entry.
+     */
+    fn create_arity_entry_for_simple_term(&mut self) {
+        let index = self.heap.alloc(1);
+        self.heap.write(index, HeapEntry::new(
+            HeapTag::Arity,
+            // simple terms always have arity 1
+            1
+        ));
     }
 
     fn compile_term(&mut self, term: Term) -> HeapIndex {
@@ -315,10 +344,15 @@ mod tests {
         compiler.compile(program);
 
         let expected_heap = vec![
+            HeapEntry::new(HeapTag::Arity, 1),
             HeapEntry::new(HeapTag::Constant, 0),
+            HeapEntry::new(HeapTag::Arity, 1),
             HeapEntry::new(HeapTag::Constant, 1),
+            HeapEntry::new(HeapTag::Arity, 1),
             HeapEntry::new(HeapTag::Constant, 2),
+            HeapEntry::new(HeapTag::Arity, 1),
             HeapEntry::new(HeapTag::Constant, 1),
+            HeapEntry::new(HeapTag::Arity, 1),
             HeapEntry::new(HeapTag::Constant, 2),
         ];
 
@@ -365,12 +399,18 @@ mod tests {
         println!("heap: {:?}", compiler.heap);
 
         let expected_heap = vec![
+            HeapEntry::new(HeapTag::Arity, 1),
             HeapEntry::new(HeapTag::Constant, 0),
-            HeapEntry::new(HeapTag::Variable, 1),
-            HeapEntry::new(HeapTag::Variable, 2),
-            HeapEntry::new(HeapTag::Unify, 1),
-            HeapEntry::new(HeapTag::Constant, 0),
+            HeapEntry::new(HeapTag::Arity, 1),
+            HeapEntry::new(HeapTag::Variable, 3),
+            HeapEntry::new(HeapTag::Arity, 1),
             HeapEntry::new(HeapTag::Variable, 5),
+            HeapEntry::new(HeapTag::Arity, 1),
+            HeapEntry::new(HeapTag::Unify, 3),
+            HeapEntry::new(HeapTag::Arity, 1),
+            HeapEntry::new(HeapTag::Constant, 0),
+            HeapEntry::new(HeapTag::Arity, 1),
+            HeapEntry::new(HeapTag::Variable, 11),
         ];
 
         for i in 0..expected_heap.len() {
@@ -455,10 +495,12 @@ mod tests {
             HeapEntry::new(HeapTag::Constant, 3),
 
             // 11: x
+            HeapEntry::new(HeapTag::Arity, 1),
             HeapEntry::new(HeapTag::Constant, 5),
 
-            // 12: y
-            HeapEntry::new(HeapTag::Variable, 12),
+            // 13: y
+            HeapEntry::new(HeapTag::Arity, 1),
+            HeapEntry::new(HeapTag::Variable, 14),
         ];
 
         for i in 0..expected_heap.len() {
@@ -467,12 +509,12 @@ mod tests {
 
         let expected_clause = ClauseDescriptor {
             base: 0,
-            length: 13,
+            length: 15,
             neck: 11,
             terms: vec![
                 HeapEntry { tag: HeapTag::Reference, data: 0 },
                 HeapEntry { tag: HeapTag::Reference, data: 11 },
-                HeapEntry { tag: HeapTag::Reference, data: 12 },
+                HeapEntry { tag: HeapTag::Reference, data: 13 },
             ],
             head_subterms: vec![expected_heap[0], expected_heap[4], expected_heap[3]],
         };
