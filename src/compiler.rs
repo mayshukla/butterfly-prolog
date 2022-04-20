@@ -168,8 +168,8 @@ impl Compiler {
     fn compile_compound_term(&mut self, term: CompoundTerm) -> HeapIndex {
         // Allocate heap space for 2 + parameters.len()
         // + 2 to make room for arity and name
-        let arity = term.parameters.len();
-        let start_index = self.heap.alloc(2 + arity);
+        let arity = term.parameters.len() + 1;
+        let start_index = self.heap.alloc(1 + arity);
         let mut index = start_index;
 
         let arity_cell = HeapEntry::new(HeapTag::Arity, arity);
@@ -433,18 +433,18 @@ mod tests {
 
         let expected_heap = vec![
             // 0: a a _4 c
-            HeapEntry::new(HeapTag::Arity, 2),
+            HeapEntry::new(HeapTag::Arity, 3),
             HeapEntry::new(HeapTag::Constant, 0),
             HeapEntry::new(HeapTag::Reference, 4),
             HeapEntry::new(HeapTag::Constant, 4),
 
             // 4: a _7
-            HeapEntry::new(HeapTag::Arity, 1),
+            HeapEntry::new(HeapTag::Arity, 2),
             HeapEntry::new(HeapTag::Constant, 0),
             HeapEntry::new(HeapTag::Reference, 7),
 
             // 7: b e f
-            HeapEntry::new(HeapTag::Arity, 2),
+            HeapEntry::new(HeapTag::Arity, 3),
             HeapEntry::new(HeapTag::Constant, 1),
             HeapEntry::new(HeapTag::Constant, 2),
             HeapEntry::new(HeapTag::Constant, 3),
@@ -474,18 +474,18 @@ mod tests {
 
         let expected_heap = vec![
             // 0: a a _4 c
-            HeapEntry::new(HeapTag::Arity, 2),
+            HeapEntry::new(HeapTag::Arity, 3),
             HeapEntry::new(HeapTag::Constant, 0),
             HeapEntry::new(HeapTag::Reference, 4),
             HeapEntry::new(HeapTag::Constant, 4),
 
             // 4: a _7
-            HeapEntry::new(HeapTag::Arity, 1),
+            HeapEntry::new(HeapTag::Arity, 2),
             HeapEntry::new(HeapTag::Constant, 0),
             HeapEntry::new(HeapTag::Reference, 7),
 
             // 7: b e f
-            HeapEntry::new(HeapTag::Arity, 2),
+            HeapEntry::new(HeapTag::Arity, 3),
             HeapEntry::new(HeapTag::Constant, 1),
             HeapEntry::new(HeapTag::Constant, 2),
             HeapEntry::new(HeapTag::Constant, 3),
@@ -512,7 +512,7 @@ mod tests {
                 HeapEntry { tag: HeapTag::Reference, data: 11 },
                 HeapEntry { tag: HeapTag::Reference, data: 13 },
             ],
-            head_subterms: vec![expected_heap[0], expected_heap[4], expected_heap[3]],
+            head_subterms: vec![expected_heap[1], expected_heap[4], expected_heap[3]],
         };
 
         assert_eq!(expected_clause, compiler.clauses[0]);
