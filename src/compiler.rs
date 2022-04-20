@@ -59,6 +59,7 @@ impl Compiler {
     fn compile_clause(&mut self, clause: Clause) {
         self.current_clause_variables.clear();
 
+        let base = self.heap.len();
         match clause.head {
             Term::Simple(_) => {
                 self.create_arity_entry_for_simple_term();
@@ -66,7 +67,7 @@ impl Compiler {
             _ => (),
         }
 
-        let base = self.compile_term(clause.head);
+        self.compile_term(clause.head);
         let neck = self.heap.len();
 
         let mut terms = Vec::new();
@@ -200,24 +201,21 @@ impl Compiler {
     /**
      * Given the index of a term, returns dereferenced heap entries of subterms.
      */
-    fn get_subterms(&self, term: HeapEntry) -> Vec<HeapEntry> {
-        let mut subterms = Vec::new();
-        /*
-        match term.tag {
-            HeapTag::Variable => (),
-            HeapTag::Unify => (),
-            HeapTag::Constant => (),
-            HeapTag::Number => (),
-            HeapTag::Arity => {
-                let arity = term.data;
-                for i in 0..arity {
+    fn get_subterms(&self, reference: HeapEntry) -> Vec<HeapEntry> {
+        let start_index = reference.data + 1;
+        let arity = self.deref_once(reference).data;
 
-                }
-            },
-            // First entry in term should never be Reference
-            _ => unreachable!()
-        };
-        */
+        let mut subterms = Vec::new();
+        for i in 0..arity {
+            let mut entry = self.deref(self.heap.read(start_index + i));
+            if let HeapTag::Reference = entry.tag {
+                entry = self.deref_once(entry);
+            }
+            // TODO should we store Variable entries with data=0?
+            // (that's what iProlog does)
+            subterms.push(entry);
+        }
+
         subterms
     }
 
@@ -395,8 +393,6 @@ mod tests {
 
         let mut compiler = Compiler::new();
         compiler.compile(program);
-
-        println!("heap: {:?}", compiler.heap);
 
         let expected_heap = vec![
             HeapEntry::new(HeapTag::Arity, 1),
