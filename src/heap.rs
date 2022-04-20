@@ -11,8 +11,8 @@ pub struct Heap {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct HeapEntry {
-    tag: HeapTag,
-    data: HeapIndex,
+    pub tag: HeapTag,
+    pub data: HeapIndex,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -76,6 +76,10 @@ impl HeapEntry {
 
     pub fn new(tag: HeapTag, data: HeapIndex) -> Self {
         HeapEntry { tag, data }
+    }
+
+    pub fn is_var_or_unify(&self) -> bool {
+        self.tag == HeapTag::Variable || self.tag == HeapTag::Unify
     }
 }
 

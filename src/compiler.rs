@@ -26,10 +26,11 @@ struct ClauseDescriptor {
     // Length of head of clause
     neck: HeapIndex,
 
-    // Toplevel skeleton of clause (indeces of top-level terms)
-    terms: Vec<HeapIndex>,
+    // Toplevel skeleton of clause (Reference entries that point to each
+    // top-level term)
+    terms: Vec<HeapEntry>,
     // Dereferenced subterms of head
-    head_subterms: Vec<HeapIndex>,
+    head_subterms: Vec<HeapEntry>,
 }
 
 #[derive(Debug)]
@@ -70,12 +71,19 @@ impl Compiler {
 
         let length = self.heap.len() - base;
 
+        // Convert indeces into heap entries
+        let terms: Vec<HeapEntry> = terms
+            .into_iter()
+            .map(|index| HeapEntry { tag: HeapTag::Reference, data: index } ).collect();
+
+        let head_subterms = self.get_subterms(terms[0]);
+
         self.clauses.push(ClauseDescriptor {
             base,
             length,
             neck,
             terms,
-            head_subterms: Vec::new(), // TODO
+            head_subterms,
         });
     }
 
@@ -158,6 +166,54 @@ impl Compiler {
         }
 
         start_index
+    }
+
+    /**
+     * Given the index of a term, returns dereferenced heap entries of subterms.
+     */
+    fn get_subterms(&self, term: HeapEntry) -> Vec<HeapEntry> {
+        let mut subterms = Vec::new();
+        /*
+        match term.tag {
+            HeapTag::Variable => (),
+            HeapTag::Unify => (),
+            HeapTag::Constant => (),
+            HeapTag::Number => (),
+            HeapTag::Arity => {
+                let arity = term.data;
+                for i in 0..arity {
+
+                }
+            },
+            // First entry in term should never be Reference
+            _ => unreachable!()
+        };
+        */
+        subterms
+    }
+
+    /**
+     * Returns the HeapEntry that the pointer HeapEntry points to.
+     */
+    fn deref_once(&self, pointer: HeapEntry) -> HeapEntry {
+        self.heap.read(pointer.data)
+    }
+
+    /**
+     * Follows chain of references until reaching first occurance of variable or
+     * a non-variable entry.
+     */
+    fn deref(&self, pointer: HeapEntry) -> HeapEntry {
+        let mut result = pointer;
+        while result.is_var_or_unify() {
+            let dereferenced = self.deref_once(result);
+            if dereferenced == result {
+                // result is first occurence of variable
+                break;
+            }
+            result = dereferenced;
+        }
+        result
     }
 }
 
@@ -413,8 +469,12 @@ mod tests {
             base: 0,
             length: 13,
             neck: 11,
-            terms: vec![0, 11, 12],
-            head_subterms: vec![0, 4, 3],
+            terms: vec![
+                HeapEntry { tag: HeapTag::Reference, data: 0 },
+                HeapEntry { tag: HeapTag::Reference, data: 11 },
+                HeapEntry { tag: HeapTag::Reference, data: 12 },
+            ],
+            head_subterms: vec![expected_heap[0], expected_heap[4], expected_heap[3]],
         };
 
         assert_eq!(expected_clause, compiler.clauses[0]);
