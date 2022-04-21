@@ -1,6 +1,9 @@
 // Define what whitespace can go between tokens
 WHITESPACE = _{ " " | "\t"}
 COMMENT = _{ "#" ~ (!NEWLINE ~ ANY)* ~ (NEWLINE | EOI) }
+// Define a silent end-of-input rule
+// https://github.com/pest-parser/pest/issues/304#issuecomment-427198507
+eoi = _{ !ANY }
 
 // Keywords
 AND = _{ "and" }
@@ -19,5 +22,6 @@ compound_term = { simple_term ~ (simple_term | term)+ }
 parenthesized_term = _{ "(" ~ term ~ ")" }
 term = _{ parenthesized_term | compound_term | simple_term }
 conjunction = { term ~ (AND ~ term)* }
-clause = { term ~ (IF ~ conjunction)? ~ (NEWLINE | EOI) }
-program = { SOI ~ clause* ~ EOI }
+clause = { term ~ (IF ~ conjunction)? ~ (NEWLINE | eoi) }
+program = { SOI ~ (query | clause)* ~ eoi }
+query = { "?" ~ term* ~ (NEWLINE | eoi) }

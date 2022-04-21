@@ -16,16 +16,17 @@ pub fn parse(code: &str) -> Result<Program, &str> {
         .next()
         .unwrap();
 
-    println!("{:?}", parsed_program);
-
     let mut program = Program::new();
     for pair in parsed_program.into_inner() {
         match pair.as_rule() {
             Rule::clause => {
                 let clause = construct_clause(pair);
-                program.push(clause);
+                program.push_clause(clause);
             },
-            Rule::EOI => (),
+            Rule::query => {
+                let query = construct_query(pair);
+                program.push_query(query);
+            },
             _ => unreachable!()
         }
     }
@@ -34,7 +35,6 @@ pub fn parse(code: &str) -> Result<Program, &str> {
 }
 
 fn construct_clause(pair: Pair<Rule>) -> Clause {
-    println!("construct clause from pair: {:?}", pair);
     let mut it = pair.into_inner();
     let head = construct_term(it.next().unwrap());
 
@@ -75,6 +75,15 @@ fn construct_compound_term(pair: Pair<Rule>) -> Term {
     }
 
     Term::Compound(CompoundTerm { name, parameters })
+}
+
+fn construct_query(pair: Pair<Rule>) -> Query {
+    let mut sub_queries = Vec::new();
+    for term in pair.into_inner() {
+        sub_queries.push(construct_term(term));
+    }
+
+    Query { sub_queries }
 }
 
 #[cfg(test)]
@@ -235,12 +244,26 @@ mod tests {
     }
 
     #[test]
+    fn test_construct_query() {
+        let program = parse("? a").unwrap();
+
+        let mut sub_queries = Vec::new();
+        sub_queries.push(Term::Simple(SimpleTerm::Atom(String::from("a"))));
+        let mut expected_program = Program::new();
+        expected_program.push_query( Query {
+            sub_queries
+        });
+
+        assert_eq!(expected_program, program);
+    }
+
+    #[test]
     fn test_parse() {
         let program = parse("a \n a (a (b e f)) c if a and b \n b").unwrap();
 
         let mut expected_program = Program::new();
 
-        expected_program.push(Clause {
+        expected_program.push_clause(Clause {
             head: Term::Simple(SimpleTerm::Atom(String::from("a"))),
             body: Vec::new()
         });
@@ -280,9 +303,9 @@ mod tests {
             body: expected_body
         };
 
-        expected_program.push(expected_clause);
+        expected_program.push_clause(expected_clause);
 
-        expected_program.push(Clause {
+        expected_program.push_clause(Clause {
             head: Term::Simple(SimpleTerm::Atom(String::from("b"))),
             body: Vec::new()
         });

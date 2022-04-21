@@ -51,7 +51,7 @@ impl Compiler {
     }
 
     pub fn compile(&mut self, program: Program) {
-        for clause in program {
+        for clause in program.clauses {
             self.compile_clause(clause);
         }
     }
@@ -313,7 +313,7 @@ mod tests {
         let mut body = Vec::new();
         body.push(Term::Simple(SimpleTerm::Atom(String::from("b"))));
         body.push(Term::Simple(SimpleTerm::Atom(String::from("c"))));
-        program.push(
+        program.push_clause(
             Clause {
                 head,
                 body
@@ -322,7 +322,7 @@ mod tests {
 
         let head = Term::Simple(SimpleTerm::Atom(String::from("b")));
         let body = Vec::new();
-        program.push(
+        program.push_clause(
             Clause {
                 head,
                 body
@@ -331,7 +331,7 @@ mod tests {
 
         let head = Term::Simple(SimpleTerm::Atom(String::from("c")));
         let body = Vec::new();
-        program.push(
+        program.push_clause(
             Clause {
                 head,
                 body
@@ -372,7 +372,7 @@ mod tests {
         body.push(Term::Simple(SimpleTerm::Variable(String::from("B"))));
         body.push(Term::Simple(SimpleTerm::Variable(String::from("C"))));
         body.push(Term::Simple(SimpleTerm::Variable(String::from("B"))));
-        program.push(
+        program.push_clause(
             Clause {
                 head,
                 body
@@ -384,7 +384,7 @@ mod tests {
         let head = Term::Simple(SimpleTerm::Atom(String::from("a")));
         let mut body = Vec::new();
         body.push(Term::Simple(SimpleTerm::Variable(String::from("B"))));
-        program.push(
+        program.push_clause(
             Clause {
                 head,
                 body
@@ -418,7 +418,7 @@ mod tests {
     fn test_compile_compound_term() {
         let mut program = Program::new();
         let head = make_compound_term();
-        program.push(Clause {
+        program.push_clause(Clause {
             head,
             body: Vec::new()
         });
@@ -462,7 +462,7 @@ mod tests {
         let mut body = Vec::new();
         body.push(Term::Simple(SimpleTerm::Atom(String::from("x"))));
         body.push(Term::Simple(SimpleTerm::Variable(String::from("Y"))));
-        program.push(Clause { head, body });
+        program.push_clause(Clause { head, body });
 
         println!("ast: {:?}", program);
         let mut compiler = Compiler::new();
