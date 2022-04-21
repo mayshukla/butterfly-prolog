@@ -109,11 +109,8 @@ impl Compiler {
         self.current_clause_variables.clear();
 
         let base = self.heap.len();
-        match clause.head {
-            Term::Simple(_) => {
-                self.create_arity_entry_for_simple_term();
-            },
-            _ => (),
+        if let Term::Simple(_) = clause.head {
+            self.create_arity_entry_for_simple_term();
         }
 
         self.compile_term(clause.head);
@@ -124,11 +121,8 @@ impl Compiler {
 
         for term in clause.body {
             let term_index = self.heap.len();
-            match term {
-                Term::Simple(_) => {
-                    self.create_arity_entry_for_simple_term();
-                },
-                _ => (),
+            if let Term::Simple(_) = term {
+                self.create_arity_entry_for_simple_term();
             }
             self.compile_term(term);
             terms.push(term_index);
@@ -249,12 +243,16 @@ impl Compiler {
 
     fn compile_query(&mut self, query: Query) {
         let base = self.heap.len();
-        let length = query.sub_queries.len();
         let mut terms = Vec::new();
         for term in query.sub_queries {
-            let term_index = self.compile_term(term);
+            let term_index = self.heap.len();
+            if let Term::Simple(_) = term {
+                self.create_arity_entry_for_simple_term();
+            }
+            self.compile_term(term);
             terms.push(HeapEntry::new(HeapTag::Reference, term_index));
         }
+        let length = self.heap.len() - base;
         self.queries.push( QueryDescriptor {
             base,
             length,
@@ -556,13 +554,20 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_clause() {
+    fn test_compile_clause_and_query() {
         let mut program = Program::new();
         let head = make_compound_term();
         let mut body = Vec::new();
         body.push(Term::Simple(SimpleTerm::Atom(String::from("x"))));
         body.push(Term::Simple(SimpleTerm::Variable(String::from("Y"))));
         program.push_clause(Clause { head, body });
+
+        let mut sub_queries = Vec::new();
+        sub_queries.push(Term::Simple(SimpleTerm::Atom(String::from("a"))));
+        sub_queries.push(Term::Simple(SimpleTerm::Atom(String::from("b"))));
+        program.push_query(Query {
+            sub_queries
+        });
 
         println!("ast: {:?}", program);
         let mut compiler = Compiler::new();
@@ -597,6 +602,15 @@ mod tests {
             // 13: y
             HeapEntry::new(HeapTag::Arity, 1),
             HeapEntry::new(HeapTag::Variable, 14),
+
+            // Start of query
+            // 15: a
+            HeapEntry::new(HeapTag::Arity, 1),
+            HeapEntry::new(HeapTag::Constant, 0),
+
+            // 17: b
+            HeapEntry::new(HeapTag::Arity, 1),
+            HeapEntry::new(HeapTag::Constant, 1),
         ];
 
         for i in 0..expected_heap.len() {
@@ -616,5 +630,26 @@ mod tests {
         };
 
         assert_eq!(expected_clause, compiler.clauses[0]);
+
+        let expected_query = QueryDescriptor {
+            base: 15,
+            length: 4,
+            terms: vec![
+                HeapEntry { tag: HeapTag::Reference, data: 15 },
+                HeapEntry { tag: HeapTag::Reference, data: 17 },
+            ],
+        };
+
+        assert_eq!(expected_query, compiler.queries[0]);
+
+        let expected_spine = Spine::new(
+            19,
+            0,
+            expected_query.terms.clone(),
+            vec![0],
+            0
+        );
+
+        assert_eq!(expected_spine, compiler.spines[0]);
     }
 }
