@@ -12,6 +12,7 @@ struct Compiler {
     // This is cleared before compiling each clause.
     current_clause_variables: HashMap<String, HeapIndex>,
 
+    queries: Vec<QueryDescriptor>,
     spines: Vec<Spine>,
     trail: Vec<HeapIndex>,
 }
@@ -20,7 +21,7 @@ struct Compiler {
  * A descriptor of a clause on the heap.
  * Based on the "Clause" class in https://github.com/ptarau/iProlog
  */
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 struct ClauseDescriptor {
     // Index to start of clause
     base: HeapIndex,
@@ -34,6 +35,20 @@ struct ClauseDescriptor {
     terms: Vec<HeapEntry>,
     // Dereferenced subterms of head
     head_subterms: Vec<HeapEntry>,
+}
+
+/**
+ * A descriptor of a query on the heap.
+ */
+#[derive(Clone, Debug, PartialEq)]
+struct QueryDescriptor {
+    // Index to start of clause
+    base: HeapIndex,
+    // Length of query array slice in heap
+    length: HeapIndex,
+
+    // Reference entries that point to each top-level term (sub-goal)
+    terms: Vec<HeapEntry>,
 }
 
 /**
@@ -51,7 +66,8 @@ struct Spine {
     dereferenced_elements: Vec<HeapEntry>,
     // TODO clarify meaning of this field
     // Clauses (potentially?) unifiable with first goal in goals
-    unifiable_clauses: Vec<HeapEntry>,
+    // Elements are indeces in Compiler.clauses
+    unifiable_clauses: Vec<usize>,
 
     // TODO clarify meaning of this field
     // Number clauses that have already been unified
@@ -72,6 +88,7 @@ impl Compiler {
             clauses: Vec::new(),
             symbol_table: SymbolTable::new(),
             current_clause_variables: HashMap::new(),
+            queries: Vec::new(),
             spines: Vec::new(),
             trail: Vec::new(),
         }
@@ -82,8 +99,10 @@ impl Compiler {
             self.compile_clause(clause);
         }
 
-        // TODO
-        //self.create_initial_spine(program.queries);
+        for query in program.queries {
+            self.compile_query(query);
+        }
+        self.create_initial_spine(self.queries.clone());
     }
 
     fn compile_clause(&mut self, clause: Clause) {
@@ -228,6 +247,21 @@ impl Compiler {
         start_index
     }
 
+    fn compile_query(&mut self, query: Query) {
+        let base = self.heap.len();
+        let length = query.sub_queries.len();
+        let mut terms = Vec::new();
+        for term in query.sub_queries {
+            let term_index = self.compile_term(term);
+            terms.push(HeapEntry::new(HeapTag::Reference, term_index));
+        }
+        self.queries.push( QueryDescriptor {
+            base,
+            length,
+            terms,
+        });
+    }
+
     /**
      * Given the index of a term, returns dereferenced heap entries of subterms.
      */
@@ -273,20 +307,21 @@ impl Compiler {
         result
     }
 
-    fn create_initial_spine(&mut self, queries: Vec<Query>) {
+    fn create_initial_spine(&mut self, queries: Vec<QueryDescriptor>) {
         let base = self.heap.len();
         // Push to self.spines in reverse order of queries so that they are
         // popped in correct order
-        queries.into_iter().rev().map(
-            |q| Spine::new(
+        let unifiable_clauses: Vec<usize> = self.clauses.clone().into_iter().enumerate().map(|(i, _)| i).collect();
+        for query in queries.into_iter().rev() {
+            let spine = Spine::new(
                 base,
                 self.trail.len(),
-                todo!(), // TODO compile queries
-                todo!(),
+                query.terms,
+                unifiable_clauses.clone(),
                 0
-            )
-        );
-        todo!()
+            );
+            self.spines.push(spine);
+        }
     }
 }
 
@@ -320,7 +355,7 @@ impl Spine {
         base: usize,
         trail_top: usize,
         goals: Vec<HeapEntry>,
-        unifiable_clauses: Vec<HeapEntry>,
+        unifiable_clauses: Vec<usize>,
         num_unified_clauses: usize
     ) -> Self {
         Spine {
