@@ -11,6 +11,9 @@ struct Compiler {
     // Keep track of indeces of variables during compilation
     // This is cleared before compiling each clause.
     current_clause_variables: HashMap<String, HeapIndex>,
+
+    spines: Vec<Spine>,
+    trail: Vec<HeapIndex>,
 }
 
 /**
@@ -33,6 +36,28 @@ struct ClauseDescriptor {
     head_subterms: Vec<HeapEntry>,
 }
 
+/**
+ * Stores the current state of the search.
+ * Based on the "Spine" class in https://github.com/ptarau/iProlog
+ */
+#[derive(Debug, PartialEq)]
+struct Spine {
+    // Top of heap when this spine created
+    base: HeapIndex,
+    // Top of trail when this spine created
+    trail_top: HeapIndex,
+
+    goals: Vec<HeapEntry>,
+    dereferenced_elements: Vec<HeapEntry>,
+    // TODO clarify meaning of this field
+    // Clauses (potentially?) unifiable with first goal in goals
+    unifiable_clauses: Vec<HeapEntry>,
+
+    // TODO clarify meaning of this field
+    // Number clauses that have already been unified
+    num_unified_clauses: usize,
+}
+
 #[derive(Debug)]
 struct SymbolTable {
     // TODO allow storing other types of data like floats
@@ -47,6 +72,8 @@ impl Compiler {
             clauses: Vec::new(),
             symbol_table: SymbolTable::new(),
             current_clause_variables: HashMap::new(),
+            spines: Vec::new(),
+            trail: Vec::new(),
         }
     }
 
@@ -54,6 +81,9 @@ impl Compiler {
         for clause in program.clauses {
             self.compile_clause(clause);
         }
+
+        // TODO
+        //self.create_initial_spine(program.queries);
     }
 
     fn compile_clause(&mut self, clause: Clause) {
@@ -242,6 +272,22 @@ impl Compiler {
         }
         result
     }
+
+    fn create_initial_spine(&mut self, queries: Vec<Query>) {
+        let base = self.heap.len();
+        // Push to self.spines in reverse order of queries so that they are
+        // popped in correct order
+        queries.into_iter().rev().map(
+            |q| Spine::new(
+                base,
+                self.trail.len(),
+                todo!(), // TODO compile queries
+                todo!(),
+                0
+            )
+        );
+        todo!()
+    }
 }
 
 impl SymbolTable {
@@ -265,6 +311,25 @@ impl SymbolTable {
         match found {
             Some(index) => Some(*index),
             None => None
+        }
+    }
+}
+
+impl Spine {
+    fn new(
+        base: usize,
+        trail_top: usize,
+        goals: Vec<HeapEntry>,
+        unifiable_clauses: Vec<HeapEntry>,
+        num_unified_clauses: usize
+    ) -> Self {
+        Spine {
+            base,
+            trail_top,
+            goals,
+            dereferenced_elements: Vec::new(),
+            unifiable_clauses,
+            num_unified_clauses,
         }
     }
 }
