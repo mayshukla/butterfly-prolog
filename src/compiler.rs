@@ -321,6 +321,32 @@ impl Compiler {
             self.spines.push(spine);
         }
     }
+
+    fn yield_answer_spine(&mut self) -> Option<Spine> {
+        while !self.spines.is_empty() {
+            let next_goal = &self.spines[self.spines.len() - 1];
+            if next_goal.has_clauses() {
+                self.spines.pop();
+                continue;
+            }
+            let unfolded = self.unfold(next_goal);
+            if let None = unfolded {
+                self.spines.pop();
+                continue;
+            }
+            let unfolded = unfolded.unwrap();
+            if unfolded.has_goals() {
+                self.spines.push(unfolded);
+                continue;
+            }
+            return Some(unfolded);
+        }
+        None
+    }
+
+    fn unfold(&self, spine: &Spine) -> Option<Spine> {
+        todo!()
+    }
 }
 
 impl SymbolTable {
@@ -364,6 +390,20 @@ impl Spine {
             unifiable_clauses,
             num_unified_clauses,
         }
+    }
+
+    /**
+     * Returns true if spine has clauses that are yet to be unified.
+     */
+    fn has_clauses(&self) -> bool {
+        self.num_unified_clauses < self.unifiable_clauses.len()
+    }
+
+    /**
+     * Returns true if spine has goals yet to be solved.
+     */
+    fn has_goals(&self) -> bool {
+        !self.goals.is_empty()
     }
 }
 
