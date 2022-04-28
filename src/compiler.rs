@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::cell::RefCell;
+use std::cell::RefMut;
 
 use crate::ast::*;
 use crate::heap::*;
@@ -269,16 +271,25 @@ impl Compiler {
 
         let mut subterms = Vec::new();
         for i in 0..arity {
-            let mut entry = self.deref(self.heap.read(start_index + i));
-            if let HeapTag::Reference = entry.tag {
-                entry = self.deref_once(entry);
-            }
-            // TODO should we store Variable entries with data=0?
-            // (that's what iProlog does)
+            let entry = self.deref(self.heap.read(start_index + i));
+            let entry = self.entry_to_register(entry);
             subterms.push(entry);
         }
 
         subterms
+    }
+
+    /**
+     * Convert a heap entry to a value that can be stored in a register.
+     * (registers are entries in Clause.head_subterms or Spine.dereferenced_elements)
+     */
+    fn entry_to_register(&self, entry: HeapEntry) -> HeapEntry {
+        if let HeapTag::Reference = entry.tag {
+            return self.deref_once(entry);
+        }
+        // TODO should we store Variable entries with data=0?
+        // (that's what iProlog does)
+        entry
     }
 
     /**
@@ -322,18 +333,22 @@ impl Compiler {
         }
     }
 
+    /**
+     * Produce the next spine representing an answer to a query.
+     * This algorithm is taken from iProlog: https://github.com/ptarau/iProlog
+     */
     fn yield_answer_spine(&mut self) -> Option<Spine> {
         while !self.spines.is_empty() {
-            let next_goal = &self.spines[self.spines.len() - 1];
-            if next_goal.has_clauses() {
-                self.spines.pop();
+            let mut next_goal = self.spines.pop().unwrap();
+            if !next_goal.has_clauses() {
                 continue;
             }
-            let unfolded = self.unfold(next_goal);
+            let unfolded = self.unfold(&mut next_goal);
             if let None = unfolded {
-                self.spines.pop();
                 continue;
             }
+            // Put spine back if still has goals
+            self.spines.push(next_goal);
             let unfolded = unfolded.unwrap();
             if unfolded.has_goals() {
                 self.spines.push(unfolded);
@@ -344,8 +359,41 @@ impl Compiler {
         None
     }
 
-    fn unfold(&self, spine: &Spine) -> Option<Spine> {
-        todo!()
+    /**
+     * Unifies the first goal in spine's list of goals with a matching clause
+     * and then returns a new spine.
+     */
+    fn unfold(&self, spine: &mut Spine) -> Option<Spine> {
+        let trail_top = self.trail.len();
+        let heap_top = self.heap.len();
+        let base = heap_top;
+
+        let goal = spine.goals.last().unwrap().clone();
+
+        self.populate_spine_dereferenced_elements(spine, goal);
+
+        todo!();
+
+        None
+    }
+
+    /**
+     * Populates dereferenced_elements array of spine based on the the given goal.
+     */
+    fn populate_spine_dereferenced_elements(&self, spine: &mut Spine, goal: HeapEntry) {
+        if spine.dereferenced_elements.len() > 0 {
+            // Already populated
+            return;
+        }
+
+        let goal_base = goal.data + 1;
+        let goal_len = self.deref_once(goal).data;
+
+        for i in 0..goal_len {
+            let entry = self.deref(self.heap.read(goal_base + i));
+            let entry = self.entry_to_register(entry);
+            spine.dereferenced_elements.push(entry);
+        }
     }
 }
 
